@@ -12,7 +12,7 @@ jobs:
     continue-on-error: true
     strategy:
       matrix:
-        os: [ macos-latest, windows-latest, ubuntu-latest ]
+        os: [ macos-latest, ubuntu-latest ]
     env:
       BUCKET_NAME: 'spb-github-test-1e4f5ff1-ee54'
       RELEASE_VERSION: ${{ github.event.inputs.version }}
@@ -41,9 +41,7 @@ jobs:
       - uses: actions/upload-artifact@v3
         with:
           name: spb-${{ matrix.os }}
-          path: |
-            build/native/nativeCompile/spb 
-            build\native\nativeCompile\spb.exe
+          path: build/native/nativeCompile/spb
 
 
   release:
@@ -55,17 +53,19 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: spb-macos-latest
+      - run: ls -R
       - run: mv spb spb-macos
 
       - uses: actions/download-artifact@v3
         with:
           name: spb-ubuntu-latest
+      - run: ls -R
       - run: mv spb spb-linux
 
-      - uses: actions/download-artifact@v3
-        with:
-          name: spb-windows-latest
-      - run: mv spb.exe spb-windows.exe
+      #      - uses: actions/download-artifact@v3
+      #        with:
+      #          name: spb-windows-latest
+      #      - run: mv spb.exe spb-windows.exe
 
       - run: ls -l
       - run: ls -R
@@ -81,5 +81,5 @@ jobs:
           files: |
             spb-macos
             spb-linux
-            spb-windows.exe
+            #            spb-windows.exe
             
