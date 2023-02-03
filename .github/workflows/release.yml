@@ -12,8 +12,9 @@ jobs:
     env:
       RELEASE_VERSION: ${{ github.event.inputs.version }}
       BUCKET_NAME: 'spb-github-test-1e4f5ff1-ee54'
-
-
+    permissions:
+      id-token: write   # This is required for requesting the JWT
+      contents: read    # This is required for actions/checkout
     steps:
       - uses: actions/checkout@v3
       - uses: gradle/wrapper-validation-action@v1
