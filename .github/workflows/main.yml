@@ -1,0 +1,41 @@
+name: Main build and test
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      matrix:
+        os: [ macos-12, windows-latest, ubuntu-latest ]
+    env:
+      BUCKET_NAME: 'spb-github-test-1e4f5ff1-ee54'
+    permissions:
+      id-token: write   # This is required for requesting the JWT
+      contents: read    # This is required for actions/checkout
+    steps:
+      - uses: actions/checkout@v3
+      - uses: gradle/wrapper-validation-action@v1
+      - name: configure aws credentials
+        uses: aws-actions/configure-aws-credentials@v1-node16
+        with:
+          role-to-assume: arn:aws:iam::391059136496:role/SpbGithubTesting
+          aws-region: ap-southeast-2
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          version: '22.3.1'
+          java-version: '19'
+          components: 'native-image'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          native-image-job-reports: 'true'
+      - name: build and test
+        run: ./gradlew nativeTest --info
+      - name: native compile
+        run: ./gradlew nativeCompile --info
+      - uses: actions/upload-artifact@v3
+        with:
+          name: spb-${{ matrix.os }}
+          path: build/native/nativeCompile/spb

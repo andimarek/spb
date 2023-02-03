@@ -1,0 +1,97 @@
+import java.text.SimpleDateFormat
+
+plugins {
+    id 'java'
+    id 'application'
+    id 'org.graalvm.buildtools.native' version '0.9.19'
+}
+
+group 'org.example'
+
+def getDevelopmentVersion() {
+    def gitCheckOutput = new StringBuilder()
+    def gitCheckError = new StringBuilder()
+    def gitCheck = ["git", "rev-parse", "--is-inside-work-tree"].execute()
+    gitCheck.waitForProcessOutput(gitCheckOutput, gitCheckError)
+    def isGit = gitCheckOutput.toString().trim()
+    if (isGit != "true") {
+        def version = "0.0.0-" + new SimpleDateFormat('yyyy-MM-dd\'T\'HH-mm-ss').format(new Date()) + "-no-git"
+        println "created development version: $version"
+        return version
+    }
+
+    def gitHashOutput = new StringBuilder()
+    def gitHashError = new StringBuilder()
+    def gitShortHash = ["git", "-C", projectDir.toString(), "rev-parse", "--short", "HEAD"].execute()
+    gitShortHash.waitForProcessOutput(gitHashOutput, gitHashError)
+    def gitHash = gitHashOutput.toString().trim()
+    if (gitHash.isEmpty()) {
+        println "git hash is empty: error: ${error.toString()}"
+        throw new IllegalStateException("git hash could not be determined")
+    }
+    def version = "0.0.0-" + new SimpleDateFormat('yyyy-MM-dd\'T\'HH-mm-ss').format(new Date()) + "-" + gitHash
+    println "created development version: $version"
+    version
+}
+
+def releaseVersion = System.env.RELEASE_VERSION
+version = releaseVersion ? releaseVersion : getDevelopmentVersion()
+
+mainClassName = "spb.Main"
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(19)
+        vendor = JvmVendorSpec.matching("GraalVM Community")
+    }
+}
+
+tasks.jar {
+    manifest {
+        attributes("Main-Class": "spb.Main",
+                "Implementation-Version": archiveVersion
+        )
+    }
+}
+
+
+dependencies {
+    compileOnly 'org.jetbrains:annotations:23.0.0'
+    implementation('com.amazonaws:aws-encryption-sdk-java:2.4.0') {
+        exclude group: 'org.bouncycastle', module: 'bcprov-ext-jdk15on'
+    }
+//    compileOnly("org.graalvm.nativeimage:svm:22.3.1")
+    implementation "org.bouncycastle:bcprov-jdk18on:1.72"
+    implementation platform('software.amazon.awssdk:bom:2.19.21')
+    implementation 'software.amazon.awssdk:s3'
+    implementation "info.picocli:picocli:4.7.0"
+    implementation 'ch.qos.logback:logback-classic:1.4.5'
+    annotationProcessor "info.picocli:picocli-codegen:4.7.0"
+
+
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
+    testImplementation("org.assertj:assertj-core:3.24.0")
+
+}
+
+test {
+    useJUnitPlatform()
+
+}
+
+
+graalvmNative {
+    binaries {
+        test {
+            buildArgs.add('--initialize-at-build-time=org.slf4j,ch.qos.logback')
+        }
+        main {
+            buildArgs.add('--initialize-at-build-time=org.slf4j,ch.qos.logback')
+        }
+    }
+}
