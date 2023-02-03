@@ -1,0 +1,31 @@
+name: Release a new version
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'the version to be released'
+        required: true
+
+jobs:
+  buildAndRelease:
+    runs-on: macos-12
+    env:
+      RELEASE_VERSION: ${{ github.event.inputs.version }}
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: gradle/wrapper-validation-action@v1
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          version: '22.3.1'
+          java-version: '19'
+          components: 'native-image'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          native-image-job-reports: 'true'
+      - name: build and test
+        run: ./gradlew nativeTest --info && ./gradlew nativeCompile --info
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          files: build/native/nativeCompile/spb
