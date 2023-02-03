@@ -7,14 +7,18 @@ on:
         required: true
 
 jobs:
-  buildAndRelease:
-    runs-on: macos-12
+  build:
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      matrix:
+        os: [ macos-latest, windows-latest, ubuntu-latest ]
     env:
-      RELEASE_VERSION: ${{ github.event.inputs.version }}
       BUCKET_NAME: 'spb-github-test-1e4f5ff1-ee54'
+      RELEASE_VERSION: ${{ github.event.inputs.version }}
     permissions:
-      id-token: write   # This is required for requesting the JWT
-      contents: write    # This is required for actions/checkout
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v3
       - uses: gradle/wrapper-validation-action@v1
@@ -30,12 +34,39 @@ jobs:
           components: 'native-image'
           github-token: ${{ secrets.GITHUB_TOKEN }}
           native-image-job-reports: 'true'
-      #      - name: test
+      #      - name: build and test
       #        run: ./gradlew nativeTest --info
-      - name: build
+      - name: native compile
         run: ./gradlew nativeCompile --info
+      - uses: actions/upload-artifact@v3
+        with:
+          name: spb-${{ matrix.os }}
+          path: |
+            build/native/nativeCompile/spb 
+            build\native\nativeCompile\spb.exe
+
+
+  release:
+    needs: [ build ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: spb-macos-latest
+      - uses: actions/download-artifact@v3
+        with:
+          name: spb-ubuntu-latest
+      - uses: actions/download-artifact@v3
+        with:
+          name: spb-windows-latest.exe
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.event.inputs.version }}
-          files: build/native/nativeCompile/spb
+          files: |
+            spb-macos-latest
+            spb-ubuntu-latest
+            spb-windows-latest.exe
+            
