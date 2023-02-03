@@ -55,22 +55,25 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: spb-macos-latest
+      - run: mv spb spb-macos
 
       - uses: actions/download-artifact@v3
         with:
           name: spb-ubuntu-latest
+      - run: mv spb spb-linux
 
       - uses: actions/download-artifact@v3
         with:
           name: spb-windows-latest
+      - run: mv spb.exe spb-windows.exe
 
       - run: ls -l
       - run: ls -R
       - run: pwd
-      - run: mv spb-windows-latest spb-windows.exe
-      - run: mv spb-ubuntu-latest spb-linux
-      - run: mv spb-macos-latest spb-macos
-
+      #      - run: mv spb-windows-latest spb-windows.exe
+      #      - run: mv spb-ubuntu-latest spb-linux
+      #      - run: mv spb-macos-latest spb-macos
+      #
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
