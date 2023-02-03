@@ -11,10 +11,17 @@ jobs:
     runs-on: macos-12
     env:
       RELEASE_VERSION: ${{ github.event.inputs.version }}
+      BUCKET_NAME: 'spb-github-test-1e4f5ff1-ee54'
+
 
     steps:
       - uses: actions/checkout@v3
       - uses: gradle/wrapper-validation-action@v1
+      - name: configure aws credentials
+        uses: aws-actions/configure-aws-credentials@v1-node16
+        with:
+          role-to-assume: arn:aws:iam::391059136496:role/SpbGithubTesting
+          aws-region: ap-southeast-2
       - uses: graalvm/setup-graalvm@v1
         with:
           version: '22.3.1'
