@@ -64,6 +64,8 @@ jobs:
         with:
           name: spb-windows-latest
 
+      - run: ls -R
+      - run: pwd
       - run: mv spb-windows-latest spb-windows.exe
       - run: mv spb-ubuntu-latest spb-linux
       - run: mv spb-macos-latest spb-macos
