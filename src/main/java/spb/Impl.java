@@ -78,6 +78,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -109,6 +110,9 @@ public class Impl {
     private final ExecutorService multipartUploadExecutor = Executors.newFixedThreadPool(5);
 
     private final Logger logger = LoggerFactory.getLogger("spb");
+
+
+    static final List<Pattern> filePatternsToIgnore = List.of(Pattern.compile("(.*/)?.DS_Store"));
 
 
     public record FileMetadata(String fileName,
@@ -309,6 +313,10 @@ public class Impl {
                 if (file.toFile().isDirectory()) {
                     return;
                 }
+                if (shouldIgnoreFile(file.toString())) {
+                    logger.debug("file {} is ignored", file);
+                    return;
+                }
                 Path fileRelativePath = folder.relativize(file);
                 existingFiles.add(fileRelativePath.toString());
 
@@ -316,7 +324,7 @@ public class Impl {
                 try {
                     long originalFileSize = Files.size(file);
                     if (originalFileSize > HUNDRED_MB) {
-                        logger.info("calculating sha256 for larger file {} with {}", file, bytesToHumanReadableFormat(originalFileSize));
+                        logger.debug("calculating sha256 for larger file {} with {}", file, bytesToHumanReadableFormat(originalFileSize));
                     }
                     originalFileSha256Base64 = Util.sha256Base64ForFile(file);
                     if (doesFileNeedBackup(folder, fileRelativePath, originalFileSha256Base64, fileNamesMap)) {
@@ -365,6 +373,10 @@ public class Impl {
                 if (file.toFile().isDirectory()) {
                     return;
                 }
+                if (shouldIgnoreFile(file.toString())) {
+                    logger.debug("file {} is ignored", file);
+                    return;
+                }
                 futures.add(CompletableFuture.runAsync((() -> {
                     try {
                         Path fileRelativePath = folder.relativize(file);
@@ -398,7 +410,7 @@ public class Impl {
     public void verifyBackup(String backupName) throws IOException, NoSuchAlgorithmException, ExecutionException, InterruptedException {
         logger.info("Start verifying backup {}", backupName);
         Path tempDirectory = Files.createTempDirectory(backupName);
-        logger.info("Created tmp directory {}", tempDirectory);
+        logger.debug("Created tmp directory {}", tempDirectory);
         restoreFullBackup(backupName, tempDirectory);
         Util.deleteFolderRecursively(tempDirectory);
         logger.info("Backup {} successfully verified", backupName);
@@ -436,10 +448,10 @@ public class Impl {
         Path encryptedFiled = targetFolder.resolve(fileName + ".encrypted");
         encryptedFiled.toFile().getParentFile().mkdirs();
         long time = System.currentTimeMillis();
-        logger.info("Start downloading file {}. Original file size: {} bytes", fileName, historicBackedUpFile.originalFileSizeInBytes);
+        logger.debug("Start downloading file {}. Original file size: {} bytes", fileName, historicBackedUpFile.originalFileSizeInBytes);
         logger.info("req: {}", getObjectRequest);
         GetObjectResponse getObjectResponse = s3Client.getObject(getObjectRequest, encryptedFiled);
-        logger.info("Finished downloading file {} after {}ms ", fileName, System.currentTimeMillis() - time);
+        logger.debug("Finished downloading file {} after {}ms ", fileName, System.currentTimeMillis() - time);
         Path decryptedFile = targetFolder.resolve(fileName);
         decryptFile(decryptedFile, encryptedFiled.toFile());
         encryptedFiled.toFile().deleteOnExit();
@@ -447,7 +459,7 @@ public class Impl {
         String sha256 = Util.sha256Base64ForFile(decryptedFile);
         String originalFileSha256Base64 = historicBackedUpFile.originalFileSha256Base64;
         if (sha256.equals(originalFileSha256Base64)) {
-            logger.info("Verified SHA256 successfully for restored file {}", fileName);
+            logger.debug("Verified SHA256 successfully for restored file {}", fileName);
         } else {
             logger.error("invalid SHA256: {} vs expected {}", sha256, originalFileSha256Base64);
             throw new RuntimeException("Could not verify restored file");
@@ -480,16 +492,16 @@ public class Impl {
         Path encryptedFiled = targetFolder.resolve(fileToRestore.fileName + ".encrypted");
         encryptedFiled.toFile().getParentFile().mkdirs();
         long time = System.currentTimeMillis();
-        logger.info("Start downloading file {}. Original file size: {} bytes", fileToRestore.fileName, fileToRestore.originalFileSizeInBytes);
+        logger.debug("Start downloading file {}. Original file size: {} bytes", fileToRestore.fileName, fileToRestore.originalFileSizeInBytes);
         GetObjectResponse getObjectResponse = s3Client.getObject(getObjectRequest, encryptedFiled);
-        logger.info("Finished downloading file {} after {}ms ", fileToRestore.fileName, System.currentTimeMillis() - time);
+        logger.debug("Finished downloading file {} after {}ms ", fileToRestore.fileName, System.currentTimeMillis() - time);
         Path decryptedFile = targetFolder.resolve(fileToRestore.fileName);
         decryptFile(decryptedFile, encryptedFiled.toFile());
         encryptedFiled.toFile().deleteOnExit();
 
         String sha256 = Util.sha256Base64ForFile(decryptedFile);
         if (sha256.equals(fileToRestore.originalFileSha256Base64)) {
-            logger.info("Verified SHA256 successfully for restored file {}", fileToRestore.fileName);
+            logger.debug("Verified SHA256 successfully for restored file {}", fileToRestore.fileName);
         } else {
             logger.error("invalid SHA256: {} vs expected {}", sha256, fileToRestore.originalFileSha256Base64);
             throw new RuntimeException("Could not verify restored file");
@@ -710,7 +722,7 @@ public class Impl {
         for (int i = 0; i < filesToDelete.size(); i += 500) {
             List<ObjectIdentifier> keys = new ArrayList<>();
             for (int j = i; j < i + 500 && j < filesToDelete.size(); j++) {
-                logger.info("Deleting {} ", filesToDelete.get(j).fileName);
+                logger.debug("Deleting {} ", filesToDelete.get(j).fileName);
                 result.add(new DeletedFile(filesToDelete.get(j).fileName));
                 keys.add(ObjectIdentifier.builder().key(filesToDelete.get(j).contentObjectKey).build());
                 keys.add(ObjectIdentifier.builder().key(filesToDelete.get(j).metaDataObjectKey).build());
@@ -729,7 +741,17 @@ public class Impl {
 
     private static long countFilesToBackup(Path folder) throws IOException {
         try (Stream<Path> walk = Files.walk(folder)) {
-            return walk.filter(path -> path.toFile().isFile()).count();
+            return walk
+                    .filter(path -> {
+                        if (path.toFile().isDirectory()) {
+                            return false;
+                        }
+                        if (shouldIgnoreFile(path.toString())) {
+                            return false;
+                        }
+                        return true;
+                    })
+                    .count();
         }
     }
 
@@ -739,17 +761,17 @@ public class Impl {
                                        Map<String, FileMetadata> fileMap
     ) {
         if (fileMap.containsKey(originalFileRelative.toString())) {
-            logger.info("found file {} checking if it changed", originalFileRelative);
+            logger.debug("found file {} checking if it changed", originalFileRelative);
             String backedUpSha256Base64 = fileMap.get(originalFileRelative.toString()).originalFileSha256Base64;
             if (backedUpSha256Base64.equals(originalFileSha256Base64)) {
-                logger.info("file {} not changed. Not being backed up again.", originalFileRelative);
+                logger.debug("file {} not changed. Not being backed up again.", originalFileRelative);
                 return false;
             } else {
                 System.out.println(backedUpSha256Base64 + " vs " + originalFileSha256Base64);
-                logger.info("file {} changed and will be backed up.", originalFileRelative);
+                logger.debug("file {} changed and will be backed up.", originalFileRelative);
             }
         } else {
-            logger.info("file {} is new and will be backed up", originalFileRelative);
+            logger.debug("file {} is new and will be backed up", originalFileRelative);
         }
         return true;
 
@@ -765,7 +787,7 @@ public class Impl {
             NoSuchAlgorithmException, IOException, ExecutionException, InterruptedException, NoSuchProviderException, InvalidKeyException {
 
         Path originalFileResolved = root.resolve(originalFileRelative);
-        logger.info("start processing {}", originalFileRelative);
+        logger.debug("start processing {}", originalFileRelative);
         String originalFileSha256Base64 = Util.sha256Base64ForFile(originalFileResolved);
         if (!doesFileNeedBackup(root, originalFileRelative, originalFileSha256Base64, fileMap)) {
             return new UnchangedFile(originalFileRelative.toString());
@@ -779,7 +801,7 @@ public class Impl {
         String contentVersionId = createContentObject(backupName, s3ObjectKey, originalFileRelative, originalFileResolved, encryptedFile, originalFileSize);
         createMetadataObject(backupName, s3ObjectKey, originalFileRelative, originalFileResolved, originalFileSha256Base64, contentVersionId);
 
-        logger.info("finished file {}", originalFileRelative);
+        logger.debug("finished file {}", originalFileRelative);
         return new ChangedFile(originalFileRelative.toString(), originalFileSha256Base64, originalFileSize);
 
     }
@@ -853,7 +875,7 @@ public class Impl {
         byte[] encryptedFileName = encryptResult.getResult();
         RequestBody requestBody = RequestBody.fromBytes(encryptedFileName);
         PutObjectResponse putObjectResponse = s3Client.putObject(putObjectRequest, requestBody);
-        logger.info("uploaded metadata object for {}: {}", originalFileRelative, putObjectResponse);
+        logger.debug("uploaded metadata object for {}: {}", originalFileRelative, putObjectResponse);
     }
 
     private String createContentObject(String backupName,
@@ -864,7 +886,7 @@ public class Impl {
                                        long originalFileSizeByte) throws IOException, ExecutionException, InterruptedException, NoSuchAlgorithmException {
         String objectKey = backupName + "/" + nameHash + "/content";
         if (originalFileSizeByte >= configFile.getMultiPartUploadLimitInBytes()) {
-            logger.info("file {} is bigger than {} with {} ... using multipart upload",
+            logger.debug("file {} is bigger than {} with {} ... using multipart upload",
                     originalFileRelative,
                     bytesToHumanReadableFormat(configFile.getMultiPartUploadLimitInBytes()),
                     bytesToHumanReadableFormat(originalFileSizeByte));
@@ -990,6 +1012,10 @@ public class Impl {
         } else {
             return (bytes / terabyte) + "tb";
         }
+    }
+
+    static boolean shouldIgnoreFile(String file) {
+        return filePatternsToIgnore.stream().anyMatch(pattern -> pattern.matcher(file).matches());
     }
 
 

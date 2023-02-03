@@ -41,6 +41,8 @@ public class Main {
 //        rootLogger.detachAppender("console");
         rootLogger.addAppender(fileAppender);
 
+        Logger spb = lc.getLogger("spb");
+        spb.setLevel(Level.DEBUG);
     }
 }
 

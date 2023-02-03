@@ -34,6 +34,8 @@ Additionally, it relies on
 
 Download a [spb release](https://github.com/andimarek/spb/releases) for Mac, Linux or Windows.
 
+Additionally to the terminal output spb writes a log files with all the details atl `$HOME_FOLDER/spb.log`.
+
 Spb requires a config file `$HOME_FOLDER/spb.config`.
 It allows you to config the S3 bucket to write the backup, the secret key to use for the encryption and
 the list of folders to back up.
