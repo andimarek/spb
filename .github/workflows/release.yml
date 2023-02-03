@@ -53,17 +53,21 @@ jobs:
       contents: write
     steps:
       - uses: actions/download-artifact@v3
-      #        with:
-      #          name: spb-macos-latest
-      #      - uses: actions/download-artifact@v3
-      #        with:
-      #          name: spb-ubuntu-latest
-      #      - uses: actions/download-artifact@v3
-      #        with:
-      #          name: spb-windows-latest
+        with:
+          name: spb-macos-latest
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: spb-ubuntu-latest
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: spb-windows-latest
+
       - run: mv spb-windows-latest spb-windows.exe
       - run: mv spb-ubuntu-latest spb-linux
       - run: mv spb-macos-latest spb-macos
+
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
