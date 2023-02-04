@@ -43,9 +43,41 @@ jobs:
           name: spb-${{ matrix.os }}
           path: build/native/nativeCompile/spb
 
+  build-windows:
+    runs-on: windows-latest
+    continue-on-error: true
+    env:
+      BUCKET_NAME: 'spb-github-test-1e4f5ff1-ee54'
+      RELEASE_VERSION: ${{ github.event.inputs.version }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v3
+      - uses: gradle/wrapper-validation-action@v1
+      - name: configure aws credentials
+        uses: aws-actions/configure-aws-credentials@v1-node16
+        with:
+          role-to-assume: arn:aws:iam::391059136496:role/SpbGithubTesting
+          aws-region: ap-southeast-2
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          version: '22.3.1'
+          java-version: '19'
+          components: 'native-image'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          native-image-job-reports: 'true'
+      #      - name: build and test
+      #        run: ./gradlew nativeTest --info
+      - name: native compile
+        run: ./gradlew nativeCompile --info
+      - uses: actions/upload-artifact@v3
+        with:
+          name: spb-windows
+          path: build/native/nativeCompile/spb.exe
 
   release:
-    needs: [ build ]
+    needs: [ build, build-windows ]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -62,18 +94,12 @@ jobs:
       - run: ls -R
       - run: mv spb spb-linux
 
-      #      - uses: actions/download-artifact@v3
-      #        with:
-      #          name: spb-windows-latest
-      #      - run: mv spb.exe spb-windows.exe
-
-      - run: ls -l
+      - uses: actions/download-artifact@v3
+        with:
+          name: spb-windows
       - run: ls -R
-      - run: pwd
-      #      - run: mv spb-windows-latest spb-windows.exe
-      #      - run: mv spb-ubuntu-latest spb-linux
-      #      - run: mv spb-macos-latest spb-macos
-      #
+      - run: mv spb.exe spb-windows.exe
+
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
@@ -81,5 +107,5 @@ jobs:
           files: |
             spb-macos
             spb-linux
-            #            spb-windows.exe
+            spb-windows.exe
             
