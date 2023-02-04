@@ -227,23 +227,23 @@ public class Impl {
         logger.info("**************");
 
         if (backedUpFiles.size() == 0) {
-            logger.info("no files found to backup. This means the folder to backup is empty.");
+            logger.debug("no files found to backup. This means the folder to backup is empty.");
         } else {
-            logger.info("details of backed up files:");
+            logger.debug("details of backed up files:");
         }
         for (BackedUpFile backedUpFile : backedUpFiles) {
             if (backedUpFile instanceof ChangedFile) {
-                logger.info("file {} was changed and backed up. ", backedUpFile.relativePath());
+                logger.debug("file {} was changed and backed up. ", backedUpFile.relativePath());
             } else if (backedUpFile instanceof UnchangedFile) {
-                logger.info("file {} was not changed and not backed up. ", backedUpFile.relativePath());
+                logger.debug("file {} was not changed and not backed up. ", backedUpFile.relativePath());
             }
         }
         if (deletedFiles.size() == 0) {
-            logger.info("no deleted files");
+            logger.debug("no deleted files");
         } else {
-            logger.info("details of deleted files:");
+            logger.debug("details of deleted files:");
             for (DeletedFile deletedFile : deletedFiles) {
-                logger.info("file {} was deleted", deletedFile.relativePath());
+                logger.debug("file {} was deleted", deletedFile.relativePath());
             }
         }
         if (dryRun) {
