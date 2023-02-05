@@ -2,6 +2,9 @@ package spb;
 
 import java.util.List;
 
+/**
+ * Result of backing up a folder.
+ */
 public record BackupFolderSummary(String backupName,
                                   String backupFolder,
                                   List<BackedUpFile> backedUpFiles,

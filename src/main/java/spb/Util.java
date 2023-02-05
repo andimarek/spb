@@ -43,4 +43,27 @@ public class Util {
                 .map(Path::toFile)
                 .forEach(File::delete);
     }
+
+    public static String bytesToHumanReadableFormat(long bytes) {
+        if (bytes < 0) {
+            throw new RuntimeException("should not happen: negative file size");
+        }
+        long kilobyte = 1024;
+        long megabyte = kilobyte * 1024;
+        long gigabyte = megabyte * 1024;
+        long terabyte = gigabyte * 1024;
+
+        if (bytes < kilobyte) {
+            return bytes + "b";
+        } else if (bytes < megabyte) {
+            return (bytes / kilobyte) + "kb";
+        } else if (bytes < gigabyte) {
+            return (bytes / megabyte) + "mb";
+        } else if (bytes < terabyte) {
+            return (bytes / gigabyte) + "gb";
+        } else {
+            return (bytes / terabyte) + "tb";
+        }
+    }
+
 }

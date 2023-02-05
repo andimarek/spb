@@ -84,6 +84,7 @@ import java.util.stream.Stream;
 
 import static spb.Impl.HistoricFile.HistoricBackedUpFile;
 import static spb.Impl.HistoricFile.HistoricDeletedFile;
+import static spb.Util.bytesToHumanReadableFormat;
 
 public class Impl {
 
@@ -513,7 +514,7 @@ public class Impl {
 
     /**
      * all backed up files across all backups configured in the config file.
-     * This doesn't include the history of all files.
+     * This doesn't include historical versions, only the latest ones.
      */
     public Map<String, List<FileMetadata>> allBackedUpFiles() throws
             IOException, ExecutionException, InterruptedException {
@@ -992,27 +993,6 @@ public class Impl {
 
     }
 
-    private static String bytesToHumanReadableFormat(long bytes) {
-        if (bytes < 0) {
-            throw new RuntimeException("should not happen: negative file size");
-        }
-        long kilobyte = 1024;
-        long megabyte = kilobyte * 1024;
-        long gigabyte = megabyte * 1024;
-        long terabyte = gigabyte * 1024;
-
-        if (bytes < kilobyte) {
-            return bytes + "b";
-        } else if (bytes < megabyte) {
-            return (bytes / kilobyte) + "kb";
-        } else if (bytes < gigabyte) {
-            return (bytes / megabyte) + "mb";
-        } else if (bytes < terabyte) {
-            return (bytes / gigabyte) + "gb";
-        } else {
-            return (bytes / terabyte) + "tb";
-        }
-    }
 
     static boolean shouldIgnoreFile(String file) {
         return filePatternsToIgnore.stream().anyMatch(pattern -> pattern.matcher(file).matches());

@@ -59,7 +59,6 @@ public class Main {
             }
         };
         filter.start();
-        ;
         console.addFilter(filter);
 
     }
