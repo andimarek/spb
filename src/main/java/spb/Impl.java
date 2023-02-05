@@ -9,7 +9,6 @@ import com.amazonaws.encryptionsdk.jce.JceMasterKey;
 import org.bouncycastle.crypto.engines.AESEngine;
 import org.bouncycastle.crypto.macs.CMac;
 import org.bouncycastle.crypto.params.KeyParameter;
-import org.bouncycastle.jcajce.provider.symmetric.AES;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,18 +50,14 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
-import java.security.Key;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
-import java.security.spec.AlgorithmParameterSpec;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -837,9 +832,12 @@ public class Impl {
         out.close();
     }
 
-    private String createObjectKey(Path relativeFileName) throws
-            NoSuchAlgorithmException, UnsupportedEncodingException, NoSuchProviderException, InvalidKeyException {
-//
+    private String createObjectKey(Path relativeFileName) {
+
+        /**
+         * We are using here BouncyCastle directly to calculate AESCMAC hash instead via
+         * JCE because this works in native images.
+         */
         CMac cMac = new CMac(new AESEngine());
         cMac.init(new KeyParameter(secretKeySpec.getEncoded()));
 
@@ -848,14 +846,6 @@ public class Impl {
         byte[] keyBytes = new byte[cMac.getMacSize()];
         cMac.doFinal(keyBytes, 0);
         return Base64.getUrlEncoder().encodeToString(keyBytes);
-    }
-
-    static class MyAesMac extends AES.AESCMAC {
-
-        @Override
-        protected void engineInit(Key key, AlgorithmParameterSpec params) throws InvalidKeyException, InvalidAlgorithmParameterException {
-            super.engineInit(key, params);
-        }
     }
 
 
@@ -907,6 +897,7 @@ public class Impl {
     private String putObject(Path originalFileRelative, Path encryptedFile, String objectKey) throws
             IOException, NoSuchAlgorithmException {
         String sha256 = Util.sha256Base64ForFile(encryptedFile);
+        logger.info("uploading file {}", originalFileRelative);
         PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                 .bucket(bucketName)
                 .key(objectKey)
@@ -945,7 +936,7 @@ public class Impl {
 
             int read;
             while ((read = fileChannel.read(buffer)) > 0) {
-                logger.info("body read {} bytes for encrypted file of {}", read, originalFileRelative);
+                logger.debug("body read {} bytes for encrypted file of {}", read, originalFileRelative);
                 buffer.flip();
                 UploadPartRequest uploadPartRequest = UploadPartRequest.builder()
                         .bucket(bucketName)
@@ -958,17 +949,17 @@ public class Impl {
 
                 RequestBody requestBody = RequestBody.fromByteBuffer(buffer);
                 buffer.clear();
-                logger.info("loading part {}/{} for file {} into memory finished", partNumber, partCount, originalFileRelative);
+                logger.debug("loading part {}/{} for file {} into memory finished", partNumber, partCount, originalFileRelative);
                 int finalPartNumber = partNumber;
                 completableFutures.add(CompletableFuture.runAsync(() -> {
                     try {
-                        logger.info("start uploading part {}/{} for file {}", finalPartNumber, partCount, originalFileRelative);
+                        logger.debug("start uploading part {}/{} for file {}", finalPartNumber, partCount, originalFileRelative);
                         UploadPartResponse uploadPartResponse = s3Client.uploadPart(uploadPartRequest,
                                 requestBody);
                         completedParts.add(CompletedPart.builder().partNumber(finalPartNumber).checksumSHA256(uploadPartResponse.checksumSHA256()).eTag(uploadPartResponse.eTag()).build());
-                        logger.info("uploaded part {}/{} for file {}", finalPartNumber, partCount, originalFileRelative);
+                        logger.debug("uploaded part {}/{} for file {}", finalPartNumber, partCount, originalFileRelative);
                     } catch (Exception e) {
-                        logger.info("error uploading part ", e);
+                        logger.error("error uploading part ", e);
                     }
                 }, multipartUploadExecutor));
             }
@@ -976,9 +967,9 @@ public class Impl {
             logger.info("error", e);
             throw e;
         }
-        logger.info("waiting for uploading parts finished for {}", originalFileRelative);
+        logger.debug("waiting for uploading parts finished for {}", originalFileRelative);
         CompletableFuture.allOf(completableFutures.toArray(new CompletableFuture[0])).get();
-        logger.info("uploading parts finished for {}", originalFileRelative);
+        logger.debug("uploading parts finished for {}", originalFileRelative);
 
         completedParts.sort(Comparator.comparingInt(CompletedPart::partNumber));
         CompletedMultipartUpload completedMultipartUpload = CompletedMultipartUpload.builder()
