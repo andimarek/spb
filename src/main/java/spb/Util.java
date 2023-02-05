@@ -15,6 +15,7 @@ import java.util.Comparator;
 public class Util {
 
     private static final int TEN_MB = 10 * 1024 * 1024;
+    public static String DIVIDER = "***************";
 
     public static String sha256Base64ForFile(Path path) throws IOException, NoSuchAlgorithmException {
         FileInputStream is = new FileInputStream(path.toFile());

@@ -64,7 +64,7 @@ public class PropertiesConfigProvider implements ConfigProvider {
             throw new RuntimeException("invalid config");
         }
         foldersBackupConfig = readFilesToBackupConfig(properties);
-        logger.info("found {} folders to backup", foldersBackupConfig.size());
+        logger.info("{} backup folders", foldersBackupConfig.size());
     }
 
 

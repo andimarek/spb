@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.regex.Pattern;
 
+import static spb.Util.DIVIDER;
 import static spb.Util.bytesToHumanReadableFormat;
 
 @CommandLine.Command(name = "list", mixinStandardHelpOptions = true, description = "list all backed up files")
@@ -44,7 +45,7 @@ public class ListFiles implements Callable<Integer> {
             logger.info("listing files including history");
             Map<String, Map<String, List<Impl.HistoricFile>>> allBackedUpFiles = impl.allBackedUpFilesIncludingHistory();
             logger.info("Found {} backups", allBackedUpFiles.size());
-            logger.info("*******");
+            logger.info(DIVIDER);
             int matchedCount = 0;
             for (String backupName : allBackedUpFiles.keySet()) {
                 Map<String, List<Impl.HistoricFile>> filesForOneBackup = allBackedUpFiles.get(backupName);
@@ -62,20 +63,20 @@ public class ListFiles implements Callable<Integer> {
                     }
                 }
             }
-            logger.info("******");
+            logger.info(DIVIDER);
             if (filePattern != null) {
                 logger.info("found {} matching files in {} for pattern '{}'", matchedCount, backupName, filePattern);
             } else {
                 logger.info("found {} files in {}", matchedCount, backupName);
             }
-            logger.info("******");
+            logger.info(DIVIDER);
         } else {
             Map<String, List<FileMetadata>> allBackedUpFiles = impl.allBackedUpFiles();
             logger.info("Found {} backups", allBackedUpFiles.size());
             for (String backupName : allBackedUpFiles.keySet()) {
-                logger.info("*******");
+                logger.info(DIVIDER);
                 List<FileMetadata> fileMetadataList = allBackedUpFiles.get(backupName);
-                logger.info("Listing matching files for backup '{}' with {} total files", backupName, fileMetadataList);
+                logger.info("Listing matching files for backup '{}' with {} total files", backupName, fileMetadataList.size());
                 int matchedCount = 0;
                 for (FileMetadata fileMetadata : fileMetadataList) {
                     if (pattern != null) {
@@ -92,13 +93,13 @@ public class ListFiles implements Callable<Integer> {
                         matchedCount++;
                     }
                 }
-                logger.info("******");
+                logger.info(DIVIDER);
                 if (filePattern != null) {
                     logger.info("found {} matching files in {} for pattern '{}'", matchedCount, backupName, filePattern);
                 } else {
                     logger.info("found {} files in {}", matchedCount, backupName);
                 }
-                logger.info("******");
+                logger.info(DIVIDER);
             }
         }
         impl.shutdown();
@@ -116,5 +117,6 @@ public class ListFiles implements Callable<Integer> {
                 logger.info("file was deleted on {}", historicDeletedFile.date());
             }
         }
+        logger.info(Util.DIVIDER);
     }
 }

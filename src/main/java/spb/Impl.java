@@ -78,12 +78,14 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static spb.Impl.HistoricFile.HistoricBackedUpFile;
 import static spb.Impl.HistoricFile.HistoricDeletedFile;
+import static spb.Util.DIVIDER;
 import static spb.Util.bytesToHumanReadableFormat;
 
 public class Impl {
@@ -155,6 +157,8 @@ public class Impl {
         }
     }
 
+    record CountFilesResult(long count, long ignoredFiles) {
+    }
 
     public Impl(ConfigProvider configProvider) throws IOException {
         this.configFile = configProvider;
@@ -183,9 +187,9 @@ public class Impl {
         List<FolderToBackupConfig> foldersBackupConfig = configFile.getFoldersBackupConfig();
         List<BackupFolderSummary> result = new ArrayList<>();
         if (dryRun) {
-            logger.info("**************");
+            logger.info(DIVIDER);
             logger.info("DRY RUN ---- NOTHING will be actually actually backed up ---- DRY RUN");
-            logger.info("**************");
+            logger.info(DIVIDER);
         }
         logger.info("start backup of {} folders", foldersBackupConfig.size());
         for (FolderToBackupConfig folderToBackupConfig : foldersBackupConfig) {
@@ -215,17 +219,17 @@ public class Impl {
         logger.info("number of backed up files (changed and unchanged): {}", backedUpFiles.size());
         logger.info("number of deleted files: {}", deletedFiles.size());
         if (dryRun) {
-            logger.info("**************");
+            logger.info(DIVIDER);
             logger.info("DRY RUN ---- NOTHING was actually backed up ---- DRY RUN");
             logger.info("DRY RUN summary for backup '{}' from folder '{}'", backupName, backupFolderSummary.backupFolder());
         } else {
-            logger.info("**************");
+            logger.info(DIVIDER);
             logger.info("Summary for backup '{}' from folder '{}'", backupName, backupFolderSummary.backupFolder());
         }
         logger.info("total files backed up: {} made out of {} changed vs {} unchanged", backedUpFiles.size(), changedFilesCount, unchangedFilesCount);
         logger.info("total data uploaded {} ", bytesToHumanReadableFormat(totalBytesUploaded));
         logger.info("total files deleted {}", deletedFiles.size());
-        logger.info("**************");
+        logger.info(DIVIDER);
 
         if (backedUpFiles.size() == 0) {
             logger.debug("no files found to backup. This means the folder to backup is empty.");
@@ -248,16 +252,16 @@ public class Impl {
             }
         }
         if (dryRun) {
-            logger.info("**************");
+            logger.info(DIVIDER);
             logger.info("DRY RUN SUMMARY FINISHED FOR '{}'", backupName);
         } else {
-            logger.info("**************");
+            logger.info(DIVIDER);
             logger.info("SUMMARY FINISHED FOR '{}'", backupName);
         }
         logger.info("total files backed up: {} made out of {} changed vs {} unchanged", backedUpFiles.size(), changedFilesCount, unchangedFilesCount);
         logger.info("total data uploaded {} ", bytesToHumanReadableFormat(totalBytesUploaded));
         logger.info("total files deleted {}", deletedFiles.size());
-        logger.info("**************");
+        logger.info(DIVIDER);
 
     }
 
@@ -268,7 +272,7 @@ public class Impl {
             boolean dryRun
     ) throws IOException, ExecutionException, InterruptedException {
         Path folder = Path.of(folderStr);
-        long filesCount;
+        CountFilesResult filesCount;
         try {
             filesCount = countFilesToBackup(folder);
         } catch (IOException e) {
@@ -276,11 +280,11 @@ public class Impl {
             throw new RuntimeException(e);
         }
 
-        if (filesCount > MAX_FILES_COUNT) {
+        if (filesCount.count > MAX_FILES_COUNT) {
             logger.error("Abort ... to many files to backup");
             throw new RuntimeException("To many files to backup");
         }
-        logger.info("Found {} to backup", filesCount);
+        logger.info("Found {} files to backup ({} ignored files)", filesCount.count, filesCount.ignoredFiles);
         List<FileMetadata> alreadyBackedUpFiles = getBackedUpFiles(backupName);
 
         if (dryRun) {
@@ -740,19 +744,22 @@ public class Impl {
     }
 
 
-    private static long countFilesToBackup(Path folder) throws IOException {
+    private static CountFilesResult countFilesToBackup(Path folder) throws IOException {
+
         try (Stream<Path> walk = Files.walk(folder)) {
-            return walk
-                    .filter(path -> {
-                        if (path.toFile().isDirectory()) {
-                            return false;
-                        }
-                        if (shouldIgnoreFile(path.toString())) {
-                            return false;
-                        }
-                        return true;
-                    })
-                    .count();
+            AtomicLong ignoredFiles = new AtomicLong();
+            AtomicLong count = new AtomicLong();
+            walk.forEach(path -> {
+                if (path.toFile().isDirectory()) {
+                    return;
+                }
+                if (shouldIgnoreFile(path.toString())) {
+                    ignoredFiles.getAndIncrement();
+                    return;
+                }
+                count.getAndIncrement();
+            });
+            return new CountFilesResult(count.get(), ignoredFiles.get());
         }
     }
 
@@ -768,7 +775,6 @@ public class Impl {
                 logger.debug("file {} not changed. Not being backed up again.", originalFileRelative);
                 return false;
             } else {
-                System.out.println(backedUpSha256Base64 + " vs " + originalFileSha256Base64);
                 logger.debug("file {} changed and will be backed up.", originalFileRelative);
             }
         } else {
