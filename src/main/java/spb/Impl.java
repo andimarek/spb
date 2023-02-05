@@ -814,7 +814,7 @@ public class Impl {
     }
 
     private Path encryptFile(Path tempDirectory, File originalFile, String s3ObjectKey) throws IOException {
-        logger.info("encrypt file {}", originalFile);
+        logger.debug("encrypt file {}", originalFile);
         Map<String, String> context = Collections.singletonMap("nameHash", s3ObjectKey);
         CryptoInputStream<JceMasterKey> encryptingStream = awsCrypto
                 .createEncryptingStream(masterKey, new FileInputStream(originalFile), context);
@@ -914,7 +914,7 @@ public class Impl {
                 .checksumSHA256(sha256)
                 .build();
         PutObjectResponse putObjectResponse = s3Client.putObject(putObjectRequest, encryptedFile);
-        logger.info("uploaded content object for {} response {} ", originalFileRelative, putObjectResponse);
+        logger.debug("uploaded content object for {} response {} ", originalFileRelative, putObjectResponse);
         return putObjectResponse.versionId();
     }
 
