@@ -78,8 +78,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static spb.Impl.HistoricFile.HistoricBackedUpFile;
-import static spb.Impl.HistoricFile.HistoricDeletedFile;
+import static spb.Impl.HistoricalFile.HistoricDeletedFile;
+import static spb.Impl.HistoricalFile.HistoricalBackedUpFile;
 import static spb.Util.DIVIDER;
 import static spb.Util.bytesToHumanReadableFormat;
 
@@ -115,40 +115,56 @@ public class Impl {
 
     public record FileMetadata(String fileName,
                                String originalFileSha256Base64,
-                               String contentObjectKey,
-                               String metaDataObjectKey,
+                               String objectKey,
                                long originalFileSizeInBytes,
                                Instant creationDate,
-                               String contentVersionId) {
+                               String contentVersionId
+    ) implements FileInfo {
 
     }
 
-    sealed interface HistoricFile
-            permits HistoricBackedUpFile, HistoricDeletedFile {
+    interface FileInfo {
+
+        String fileName();
+
+        String originalFileSha256Base64();
+
+        long originalFileSizeInBytes();
+
+        Instant creationDate();
+
+        String objectKey();
+
+        @Nullable String contentVersionId();
+
+    }
+
+    public sealed interface HistoricalFile
+            permits HistoricalBackedUpFile, HistoricDeletedFile {
 
         String fileName();
 
         boolean isLatest();
 
-        Instant date();
+        Instant creationDate();
 
-        record HistoricBackedUpFile(
+        record HistoricalBackedUpFile(
                 String fileName,
                 String originalFileSha256Base64,
                 long originalFileSizeInBytes,
-                Instant date,
+                Instant creationDate,
                 boolean isLatest,
                 String objectKey,
                 String contentVersionId,
                 String metadataVersionId
-        ) implements HistoricFile {
+        ) implements HistoricalFile, FileInfo {
         }
 
         record HistoricDeletedFile(
                 String fileName,
-                Instant date,
+                Instant creationDate,
                 boolean isLatest
-        ) implements HistoricFile {
+        ) implements HistoricalFile {
         }
     }
 
@@ -423,7 +439,7 @@ public class Impl {
         for (final FileMetadata fileMetadata : backedUpFiles) {
             completableFutures.add(CompletableFuture.runAsync(() -> {
                 try {
-                    restoreFileImpl(fileMetadata, targetFolder);
+                    restoreFile(fileMetadata, targetFolder);
                 } catch (Exception e) {
                     logger.error("error restoring file {}", fileMetadata.fileName, e);
                     throw new RuntimeException(e);
@@ -435,38 +451,16 @@ public class Impl {
 
     }
 
-    public void restoreHistoricFile(String backupName, Path targetFolder, HistoricBackedUpFile historicBackedUpFile) throws IOException, NoSuchAlgorithmException {
-        logger.info("restoring historic file {} from backup {}", historicBackedUpFile, backupName);
-        GetObjectRequest getObjectRequest = GetObjectRequest
-                .builder()
-                .bucket(bucketName)
-                .versionId(historicBackedUpFile.contentVersionId)
-                .key(historicBackedUpFile.objectKey + "content")
-                .build();
-        String fileName = historicBackedUpFile.fileName;
 
-        Path encryptedFiled = targetFolder.resolve(fileName + ".encrypted");
-        encryptedFiled.toFile().getParentFile().mkdirs();
-        long time = System.currentTimeMillis();
-        logger.debug("Start downloading file {}. Original file size: {} bytes", fileName, historicBackedUpFile.originalFileSizeInBytes);
-        logger.info("req: {}", getObjectRequest);
-        GetObjectResponse getObjectResponse = s3Client.getObject(getObjectRequest, encryptedFiled);
-        logger.debug("Finished downloading file {} after {}ms ", fileName, System.currentTimeMillis() - time);
-        Path decryptedFile = targetFolder.resolve(fileName);
-        decryptFile(decryptedFile, encryptedFiled.toFile());
-        encryptedFiled.toFile().deleteOnExit();
-
-        String sha256 = Util.sha256Base64ForFile(decryptedFile);
-        String originalFileSha256Base64 = historicBackedUpFile.originalFileSha256Base64;
-        if (sha256.equals(originalFileSha256Base64)) {
-            logger.debug("Verified SHA256 successfully for restored file {}", fileName);
-        } else {
-            logger.error("invalid SHA256: {} vs expected {}", sha256, originalFileSha256Base64);
-            throw new RuntimeException("Could not verify restored file");
-        }
-
-        logger.info("file {} restored at {}", fileName, targetFolder);
+    public void restoreHistoricalFile(String backupName,
+                                      Path targetFolder,
+                                      String fileToRestore,
+                                      String metadataVersionId) throws IOException, NoSuchAlgorithmException {
+        String objectHash = createObjectKey(Path.of(fileToRestore));
+        FileMetadata fileMetadata = readFileMetadata(objectHash + "/", metadataVersionId);
+        restoreFile(fileMetadata, targetFolder);
     }
+
 
     public void restoreFile(Path targetFolder,
                             String backupName,
@@ -478,36 +472,44 @@ public class Impl {
             logger.info("file {} not found in backup {} ... nothing to restore", fileToRestore, backupName);
             return;
         }
-        restoreFileImpl(backedUpFileOptional.get(), targetFolder);
+        restoreFile(backedUpFileOptional.get(), targetFolder);
     }
 
-    private void restoreFileImpl(FileMetadata fileToRestore,
-                                 Path targetFolder) throws IOException, NoSuchAlgorithmException {
-        logger.info("restoring file {}", fileToRestore.fileName);
+
+    public void restoreFile(FileInfo fileInfo,
+                            Path targetFolder) throws IOException, NoSuchAlgorithmException {
+        logger.debug("restoring file {}", fileInfo);
+        /**
+         * Download
+         */
         GetObjectRequest getObjectRequest = GetObjectRequest
                 .builder()
                 .bucket(bucketName)
-                .key(fileToRestore.contentObjectKey)
+                .key(contentObjectKey(fileInfo.objectKey()))
+                .versionId(fileInfo.contentVersionId())
                 .build();
-        Path encryptedFiled = targetFolder.resolve(fileToRestore.fileName + ".encrypted");
+        Path encryptedFiled = targetFolder.resolve(fileInfo.fileName() + ".encrypted");
         encryptedFiled.toFile().getParentFile().mkdirs();
         long time = System.currentTimeMillis();
-        logger.debug("Start downloading file {}. Original file size: {} bytes", fileToRestore.fileName, fileToRestore.originalFileSizeInBytes);
+        logger.debug("Start downloading file {}. Original file size: {} bytes", fileInfo.fileName(), fileInfo.originalFileSizeInBytes());
         GetObjectResponse getObjectResponse = s3Client.getObject(getObjectRequest, encryptedFiled);
-        logger.debug("Finished downloading file {} after {}ms ", fileToRestore.fileName, System.currentTimeMillis() - time);
-        Path decryptedFile = targetFolder.resolve(fileToRestore.fileName);
+        logger.debug("Finished downloading file {} after {}ms ", fileInfo.fileName(), System.currentTimeMillis() - time);
+        Path decryptedFile = targetFolder.resolve(fileInfo.fileName());
         decryptFile(decryptedFile, encryptedFiled.toFile());
         encryptedFiled.toFile().deleteOnExit();
 
+        /**
+         * Verify
+         */
         String sha256 = Util.sha256Base64ForFile(decryptedFile);
-        if (sha256.equals(fileToRestore.originalFileSha256Base64)) {
-            logger.debug("Verified SHA256 successfully for restored file {}", fileToRestore.fileName);
+        if (sha256.equals(fileInfo.originalFileSha256Base64())) {
+            logger.debug("Verified SHA256 successfully for restored file {}", fileInfo.fileName());
         } else {
-            logger.error("invalid SHA256: {} vs expected {}", sha256, fileToRestore.originalFileSha256Base64);
+            logger.error("invalid SHA256: {} vs expected {}", sha256, fileInfo.originalFileSha256Base64());
             throw new RuntimeException("Could not verify restored file");
         }
 
-        logger.info("file {} restored at {}", fileToRestore.fileName, targetFolder);
+        logger.info("file {} restored at {}", fileInfo.fileName(), targetFolder);
     }
 
 
@@ -526,11 +528,11 @@ public class Impl {
         return result;
     }
 
-    public Map<String, Map<String, List<HistoricFile>>> allBackedUpFilesIncludingHistory() throws ExecutionException, InterruptedException {
-        Map<String, Map<String, List<HistoricFile>>> result = new LinkedHashMap<>();
+    public Map<String, Map<String, List<HistoricalFile>>> allBackedUpFilesIncludingHistory() throws ExecutionException, InterruptedException {
+        Map<String, Map<String, List<HistoricalFile>>> result = new LinkedHashMap<>();
         List<FolderToBackupConfig> foldersBackupConfig = configFile.getFoldersBackupConfig();
         for (FolderToBackupConfig folderToBackupConfig : foldersBackupConfig) {
-            Map<String, List<HistoricFile>> fileMetadata = getBackedUpFilesIncludingHistory(folderToBackupConfig.backupName());
+            Map<String, List<HistoricalFile>> fileMetadata = getBackedUpFilesIncludingHistory(folderToBackupConfig.backupName());
             result.put(folderToBackupConfig.backupName(), fileMetadata);
         }
         return result;
@@ -541,7 +543,7 @@ public class Impl {
     /**
      * The result is ordered by date, from oldest to newest.
      */
-    private Map<String, List<HistoricFile>> getBackedUpFilesIncludingHistory(String backupName) throws ExecutionException, InterruptedException {
+    private Map<String, List<HistoricalFile>> getBackedUpFilesIncludingHistory(String backupName) throws ExecutionException, InterruptedException {
         List<CommonPrefix> allKeys = getAllObjectKeysInBackup(backupName, true);
 
         Map<String, List<Object>> objectKeyToVersionAndDeleteMarker = new LinkedHashMap<>();
@@ -584,18 +586,18 @@ public class Impl {
             objectKeyToVersionAndDeleteMarker.put(commonPrefix.prefix(), versionsAndDeleteMarkers);
         }
 
-        Map<String, List<HistoricFile>> result = Collections.synchronizedMap(new LinkedHashMap<>());
+        Map<String, List<HistoricalFile>> result = Collections.synchronizedMap(new LinkedHashMap<>());
         List<CompletableFuture<?>> futures = new ArrayList<>();
         for (String objectKey : objectKeyToVersionAndDeleteMarker.keySet()) {
             futures.add(CompletableFuture.runAsync(() -> {
                 // This is sorted
                 String fileName = null;
-                List<HistoricFile> fileMetadataForOneKey = new ArrayList<>();
+                List<HistoricalFile> fileMetadataForOneKey = new ArrayList<>();
                 for (Object versionOrDeleteMarker : objectKeyToVersionAndDeleteMarker.get(objectKey)) {
                     if (versionOrDeleteMarker instanceof ObjectVersion metadataObjectVersion) {
                         try {
                             FileMetadata fileMetadata = readFileMetadata(objectKey, metadataObjectVersion.versionId());
-                            fileMetadataForOneKey.add(new HistoricBackedUpFile(
+                            fileMetadataForOneKey.add(new HistoricalBackedUpFile(
                                     fileMetadata.fileName,
                                     fileMetadata.originalFileSha256Base64,
                                     fileMetadata.originalFileSizeInBytes,
@@ -675,8 +677,7 @@ public class Impl {
 
         return new FileMetadata(fileName,
                 originalFileSha256Base64,
-                keyWithEndingSlash + "content",
-                keyWithEndingSlash + "metadata",
+                keyWithEndingSlash,
                 originalFileSizeInBytes,
                 creationDate,
                 contentVersionId
@@ -724,8 +725,10 @@ public class Impl {
             for (int j = i; j < i + 500 && j < filesToDelete.size(); j++) {
                 logger.debug("Deleting {} ", filesToDelete.get(j).fileName);
                 result.add(new DeletedFile(filesToDelete.get(j).fileName));
-                keys.add(ObjectIdentifier.builder().key(filesToDelete.get(j).contentObjectKey).build());
-                keys.add(ObjectIdentifier.builder().key(filesToDelete.get(j).metaDataObjectKey).build());
+                String contentObjectKey = contentObjectKey(filesToDelete.get(j).objectKey());
+                String metadataObjectKey = metadataObjectKey(filesToDelete.get(j).objectKey());
+                keys.add(ObjectIdentifier.builder().key(contentObjectKey).build());
+                keys.add(ObjectIdentifier.builder().key(metadataObjectKey).build());
             }
             DeleteObjectsRequest deleteObjectRequest = DeleteObjectsRequest.builder()
                     .bucket(bucketName)
@@ -993,6 +996,14 @@ public class Impl {
 
     static boolean shouldIgnoreFile(String file) {
         return filePatternsToIgnore.stream().anyMatch(pattern -> pattern.matcher(file).matches());
+    }
+
+    private static String contentObjectKey(String objectKeyEndingWithSlash) {
+        return objectKeyEndingWithSlash + "content";
+    }
+
+    private static String metadataObjectKey(String objectKeyEndingWithSlash) {
+        return objectKeyEndingWithSlash + "metadata";
     }
 
 

@@ -43,15 +43,15 @@ public class ListFiles implements Callable<Integer> {
 
         if (historical) {
             logger.info("listing files including history");
-            Map<String, Map<String, List<Impl.HistoricFile>>> allBackedUpFiles = impl.allBackedUpFilesIncludingHistory();
+            Map<String, Map<String, List<Impl.HistoricalFile>>> allBackedUpFiles = impl.allBackedUpFilesIncludingHistory();
             logger.info("Found {} backups", allBackedUpFiles.size());
             logger.info(DIVIDER);
             int matchedCount = 0;
             for (String backupName : allBackedUpFiles.keySet()) {
-                Map<String, List<Impl.HistoricFile>> filesForOneBackup = allBackedUpFiles.get(backupName);
+                Map<String, List<Impl.HistoricalFile>> filesForOneBackup = allBackedUpFiles.get(backupName);
                 logger.info("Listing matching files for backup '{}' with {} total files", backupName, filesForOneBackup.size());
                 for (String file : filesForOneBackup.keySet()) {
-                    List<Impl.HistoricFile> allFileVersions = filesForOneBackup.get(file);
+                    List<Impl.HistoricalFile> allFileVersions = filesForOneBackup.get(file);
                     if (pattern != null) {
                         if (pattern.matcher(file).matches()) {
                             printAllVersions(file, allFileVersions);
@@ -106,15 +106,15 @@ public class ListFiles implements Callable<Integer> {
         return 0;
     }
 
-    private void printAllVersions(String file, List<Impl.HistoricFile> allFileVersions) {
+    private void printAllVersions(String file, List<Impl.HistoricalFile> allFileVersions) {
         logger.info("All {} versions of file: {}", allFileVersions.size(), file);
-        for (Impl.HistoricFile historicFile : allFileVersions) {
-            if (historicFile instanceof Impl.HistoricFile.HistoricBackedUpFile historicBackedUpFile) {
-                logger.info("backup date:{}, ", historicFile.date());
+        for (Impl.HistoricalFile historicFile : allFileVersions) {
+            if (historicFile instanceof Impl.HistoricalFile.HistoricalBackedUpFile historicBackedUpFile) {
+                logger.info("backup date:{}, ", historicFile.creationDate());
                 logger.info("size: {}", bytesToHumanReadableFormat(historicBackedUpFile.originalFileSizeInBytes()));
                 logger.info("version-id: {}", historicBackedUpFile.metadataVersionId());
-            } else if (historicFile instanceof Impl.HistoricFile.HistoricDeletedFile historicDeletedFile) {
-                logger.info("file was deleted on {}", historicDeletedFile.date());
+            } else if (historicFile instanceof Impl.HistoricalFile.HistoricDeletedFile historicDeletedFile) {
+                logger.info("file was deleted on {}", historicDeletedFile.creationDate());
             }
         }
         logger.info(Util.DIVIDER);

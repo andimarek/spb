@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import spb.BackupFolderSummary.BackedUpFile;
 import spb.BackupFolderSummary.BackedUpFile.ChangedFile;
 import spb.BackupFolderSummary.BackedUpFile.UnchangedFile;
-import spb.Impl.HistoricFile;
+import spb.Impl.HistoricalFile;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -215,32 +215,32 @@ public class E2ETest {
 
         impl.verifyAllBackup();
 
-        Map<String, Map<String, List<HistoricFile>>> allBackedUpFilesIncludingHistory = impl.allBackedUpFilesIncludingHistory();
+        Map<String, Map<String, List<HistoricalFile>>> allBackedUpFilesIncludingHistory = impl.allBackedUpFilesIncludingHistory();
         assertThat(allBackedUpFilesIncludingHistory).hasSize(1);
         assertThat(allBackedUpFilesIncludingHistory.keySet().iterator().next()).isEqualTo(backupName);
 
-        Map<String, List<HistoricFile>> history = allBackedUpFilesIncludingHistory.get(backupName);
+        Map<String, List<HistoricalFile>> history = allBackedUpFilesIncludingHistory.get(backupName);
         assertThat(history).hasSize(6);
         assertThat(history.get(file1Key)).hasSize(2);
-        assertThat(history.get(file1Key).get(0)).isInstanceOf(HistoricFile.HistoricBackedUpFile.class);
-        assertThat(history.get(file1Key).get(1)).isInstanceOf(HistoricFile.HistoricDeletedFile.class);
+        assertThat(history.get(file1Key).get(0)).isInstanceOf(HistoricalFile.HistoricalBackedUpFile.class);
+        assertThat(history.get(file1Key).get(1)).isInstanceOf(HistoricalFile.HistoricDeletedFile.class);
 
         assertThat(history.get(file2Key)).hasSize(1);
-        assertThat(history.get(file2Key).get(0)).isInstanceOf(HistoricFile.HistoricBackedUpFile.class);
+        assertThat(history.get(file2Key).get(0)).isInstanceOf(HistoricalFile.HistoricalBackedUpFile.class);
 
         assertThat(history.get(largeFileKey)).hasSize(2);
-        assertThat(history.get(largeFileKey).get(0)).isInstanceOf(HistoricFile.HistoricBackedUpFile.class);
-        assertThat(history.get(largeFileKey).get(1)).isInstanceOf(HistoricFile.HistoricDeletedFile.class);
+        assertThat(history.get(largeFileKey).get(0)).isInstanceOf(HistoricalFile.HistoricalBackedUpFile.class);
+        assertThat(history.get(largeFileKey).get(1)).isInstanceOf(HistoricalFile.HistoricDeletedFile.class);
 
         assertThat(history.get(file6Key)).hasSize(2);
-        assertThat(history.get(file6Key).get(0)).isInstanceOf(HistoricFile.HistoricBackedUpFile.class);
-        assertThat(history.get(file6Key).get(1)).isInstanceOf(HistoricFile.HistoricBackedUpFile.class);
+        assertThat(history.get(file6Key).get(0)).isInstanceOf(HistoricalFile.HistoricalBackedUpFile.class);
+        assertThat(history.get(file6Key).get(1)).isInstanceOf(HistoricalFile.HistoricalBackedUpFile.class);
 
         /**
          * Restore historic versions of file-large
          */
         Path tempDirectory = Files.createTempDirectory("spb-e2e");
-        impl.restoreHistoricFile(backupName, tempDirectory, (HistoricFile.HistoricBackedUpFile) history.get("file-large.txt").get(0));
+        impl.restoreFile((HistoricalFile.HistoricalBackedUpFile) history.get("file-large.txt").get(0), tempDirectory);
 
         Path restoredFileLarge = tempDirectory.resolve("file-large.txt");
         String restoredFileSha256Base64FileLarge = Util.sha256Base64ForFile(restoredFileLarge);
@@ -249,7 +249,8 @@ public class E2ETest {
         /**
          * Restore historic versions of file-6
          */
-        impl.restoreHistoricFile(backupName, tempDirectory, (HistoricFile.HistoricBackedUpFile) history.get(file6Key).get(0));
+        HistoricalFile.HistoricalBackedUpFile historicBackedUpFile = (HistoricalFile.HistoricalBackedUpFile) history.get(file6Key).get(0);
+        impl.restoreFile(historicBackedUpFile, tempDirectory);
 
         Path restoredFile6 = tempDirectory.resolve(file6Key);
         String restoredFileSha256Base64File6 = Util.sha256Base64ForFile(restoredFile6);

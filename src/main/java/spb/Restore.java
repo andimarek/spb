@@ -1,5 +1,6 @@
 package spb;
 
+import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -19,13 +20,23 @@ public class Restore implements Callable<Integer> {
     @Option(names = {"--file-name"}, description = "A specific file to restore", paramLabel = "file", required = false)
     private String file;
 
+    @CommandLine.Option(names = {"--version-id"}, description = "The version of a specific file to restore. " +
+            "Only allowed in combination with --file-name",
+            paramLabel = "versionId", required = false)
+    private String versionId;
+
+
     @Override
     public Integer call() throws Exception {
         Impl impl = new Impl();
         if (file == null) {
             impl.restoreFullBackup(backupName, targetFolder.toPath());
         } else {
-            impl.restoreFile(targetFolder.toPath(), backupName, file);
+            if (versionId == null) {
+                impl.restoreFile(targetFolder.toPath(), backupName, file);
+            } else {
+                impl.restoreHistoricalFile(backupName, targetFolder.toPath(), file, versionId);
+            }
         }
         impl.shutdown();
         return 0;
