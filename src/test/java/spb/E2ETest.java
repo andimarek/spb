@@ -223,14 +223,14 @@ public class E2ETest {
         assertThat(history).hasSize(6);
         assertThat(history.get(file1Key)).hasSize(2);
         assertThat(history.get(file1Key).get(0)).isInstanceOf(HistoricalFile.HistoricalBackedUpFile.class);
-        assertThat(history.get(file1Key).get(1)).isInstanceOf(HistoricalFile.HistoricDeletedFile.class);
+        assertThat(history.get(file1Key).get(1)).isInstanceOf(HistoricalFile.HistoricalDeletedFile.class);
 
         assertThat(history.get(file2Key)).hasSize(1);
         assertThat(history.get(file2Key).get(0)).isInstanceOf(HistoricalFile.HistoricalBackedUpFile.class);
 
         assertThat(history.get(largeFileKey)).hasSize(2);
         assertThat(history.get(largeFileKey).get(0)).isInstanceOf(HistoricalFile.HistoricalBackedUpFile.class);
-        assertThat(history.get(largeFileKey).get(1)).isInstanceOf(HistoricalFile.HistoricDeletedFile.class);
+        assertThat(history.get(largeFileKey).get(1)).isInstanceOf(HistoricalFile.HistoricalDeletedFile.class);
 
         assertThat(history.get(file6Key)).hasSize(2);
         assertThat(history.get(file6Key).get(0)).isInstanceOf(HistoricalFile.HistoricalBackedUpFile.class);

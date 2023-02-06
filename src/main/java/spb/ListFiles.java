@@ -113,7 +113,7 @@ public class ListFiles implements Callable<Integer> {
                 logger.info("backup date:{}, ", historicFile.creationDate());
                 logger.info("size: {}", bytesToHumanReadableFormat(historicBackedUpFile.originalFileSizeInBytes()));
                 logger.info("version-id: {}", historicBackedUpFile.metadataVersionId());
-            } else if (historicFile instanceof Impl.HistoricalFile.HistoricDeletedFile historicDeletedFile) {
+            } else if (historicFile instanceof Impl.HistoricalFile.HistoricalDeletedFile historicDeletedFile) {
                 logger.info("file was deleted on {}", historicDeletedFile.creationDate());
             }
         }

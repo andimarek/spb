@@ -78,8 +78,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static spb.Impl.HistoricalFile.HistoricDeletedFile;
 import static spb.Impl.HistoricalFile.HistoricalBackedUpFile;
+import static spb.Impl.HistoricalFile.HistoricalDeletedFile;
 import static spb.Util.DIVIDER;
 import static spb.Util.bytesToHumanReadableFormat;
 
@@ -133,6 +133,7 @@ public class Impl {
 
         Instant creationDate();
 
+        // this includes the backup-name + nameHash + "/"
         String objectKey();
 
         @Nullable String contentVersionId();
@@ -140,7 +141,7 @@ public class Impl {
     }
 
     public sealed interface HistoricalFile
-            permits HistoricalBackedUpFile, HistoricDeletedFile {
+            permits HistoricalBackedUpFile, HistoricalDeletedFile {
 
         String fileName();
 
@@ -160,7 +161,7 @@ public class Impl {
         ) implements HistoricalFile, FileInfo {
         }
 
-        record HistoricDeletedFile(
+        record HistoricalDeletedFile(
                 String fileName,
                 Instant creationDate,
                 boolean isLatest
@@ -456,8 +457,8 @@ public class Impl {
                                       Path targetFolder,
                                       String fileToRestore,
                                       String metadataVersionId) throws IOException, NoSuchAlgorithmException {
-        String objectHash = createObjectKey(Path.of(fileToRestore));
-        FileMetadata fileMetadata = readFileMetadata(objectHash + "/", metadataVersionId);
+        String fileNameHash = createFileNameHash(Path.of(fileToRestore));
+        FileMetadata fileMetadata = readFileMetadata(backupName + "/" + fileNameHash + "/", metadataVersionId);
         restoreFile(fileMetadata, targetFolder);
     }
 
@@ -615,7 +616,7 @@ public class Impl {
                             throw new RuntimeException(e);
                         }
                     } else if (versionOrDeleteMarker instanceof DeleteMarkerEntry deleteMarkerEntry) {
-                        fileMetadataForOneKey.add(new HistoricDeletedFile(
+                        fileMetadataForOneKey.add(new HistoricalDeletedFile(
                                 fileName,
                                 deleteMarkerEntry.lastModified(),
                                 deleteMarkerEntry.isLatest()
@@ -655,6 +656,7 @@ public class Impl {
                 .key(keyWithEndingSlash + "metadata")
                 .versionId(versionId)
                 .build();
+        logger.debug("get object for metadata: {}", getObjectRequest);
         ResponseInputStream<GetObjectResponse> responseResponseInputStream = s3Client.getObject(getObjectRequest);
         GetObjectResponse getObjectResponse = responseResponseInputStream.response();
         Instant creationDate = getObjectResponse.lastModified();
@@ -675,13 +677,16 @@ public class Impl {
         long originalFileSizeInBytes = Long.parseLong(metadataEntries[3]);
         String contentVersionId = metadataEntries[4];
 
-        return new FileMetadata(fileName,
+
+        FileMetadata fileMetadata = new FileMetadata(fileName,
                 originalFileSha256Base64,
                 keyWithEndingSlash,
                 originalFileSizeInBytes,
                 creationDate,
                 contentVersionId
         );
+        logger.debug("read metadata: {}", fileMetadata);
+        return fileMetadata;
     }
 
     private List<CommonPrefix> getAllObjectKeysInBackup(String backupName, boolean includeDeleted) {
@@ -797,26 +802,26 @@ public class Impl {
         if (!doesFileNeedBackup(root, originalFileRelative, originalFileSha256Base64, fileMap)) {
             return new UnchangedFile(originalFileRelative.toString());
         }
-        String s3ObjectKey = createObjectKey(originalFileRelative);
-        Path encryptedFile = encryptFile(tempDirectory, originalFileResolved.toFile(), s3ObjectKey);
+        String fileNameHash = createFileNameHash(originalFileRelative);
+        Path encryptedFile = encryptFile(tempDirectory, originalFileResolved.toFile(), fileNameHash);
 
         encryptedFile.toFile().deleteOnExit();
 
         long originalFileSize = Files.size(originalFileResolved);
-        String contentVersionId = createContentObject(backupName, s3ObjectKey, originalFileRelative, originalFileResolved, encryptedFile, originalFileSize);
-        createMetadataObject(backupName, s3ObjectKey, originalFileRelative, originalFileResolved, originalFileSha256Base64, contentVersionId);
+        String contentVersionId = createContentObject(backupName, fileNameHash, originalFileRelative, originalFileResolved, encryptedFile, originalFileSize);
+        createMetadataObject(backupName, fileNameHash, originalFileRelative, originalFileResolved, originalFileSha256Base64, contentVersionId);
 
         logger.debug("finished file {}", originalFileRelative);
         return new ChangedFile(originalFileRelative.toString(), originalFileSha256Base64, originalFileSize);
 
     }
 
-    private Path encryptFile(Path tempDirectory, File originalFile, String s3ObjectKey) throws IOException {
+    private Path encryptFile(Path tempDirectory, File originalFile, String fileNameHash) throws IOException {
         logger.debug("encrypt file {}", originalFile);
-        Map<String, String> context = Collections.singletonMap("nameHash", s3ObjectKey);
+        Map<String, String> context = Collections.singletonMap("nameHash", fileNameHash);
         CryptoInputStream<JceMasterKey> encryptingStream = awsCrypto
                 .createEncryptingStream(masterKey, new FileInputStream(originalFile), context);
-        Path encryptedFile = tempDirectory.resolve(s3ObjectKey);
+        Path encryptedFile = tempDirectory.resolve(fileNameHash);
         FileOutputStream out = new FileOutputStream(encryptedFile.toFile());
         IoUtils.copy(encryptingStream, out);
         encryptingStream.close();
@@ -835,7 +840,7 @@ public class Impl {
         out.close();
     }
 
-    private String createObjectKey(Path relativeFileName) {
+    private String createFileNameHash(Path relativeFileName) {
 
         /**
          * We are using here BouncyCastle directly to calculate AESCMAC hash instead via
@@ -853,14 +858,14 @@ public class Impl {
 
 
     private void createMetadataObject(String backupName,
-                                      String nameHash,
+                                      String fileNameHash,
                                       Path originalFileRelative,
                                       Path originalFileResolved,
                                       String originalFileSha256Base64,
                                       String contentVersionId) throws IOException {
         PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                 .bucket(bucketName)
-                .key(backupName + "/" + nameHash + "/metadata")
+                .key(backupName + "/" + fileNameHash + "/metadata")
                 .build();
         long originalFileSizeBytes = Files.size(originalFileResolved);
         // comma separated list
@@ -879,12 +884,12 @@ public class Impl {
     }
 
     private String createContentObject(String backupName,
-                                       String nameHash,
+                                       String fileNameHash,
                                        Path originalFileRelative,
                                        Path originalFileResolved,
                                        Path encryptedFile,
                                        long originalFileSizeByte) throws IOException, ExecutionException, InterruptedException, NoSuchAlgorithmException {
-        String objectKey = backupName + "/" + nameHash + "/content";
+        String objectKey = backupName + "/" + fileNameHash + "/content";
         if (originalFileSizeByte >= configFile.getMultiPartUploadLimitInBytes()) {
             logger.debug("file {} is bigger than {} with {} ... using multipart upload",
                     originalFileRelative,
