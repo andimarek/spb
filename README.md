@@ -93,29 +93,42 @@ Example to initiate a backup:
 spb backup
 ```
 
-Example to restore a specific file from the backup `documents`:
-
-```shell
-spb restore --backup-name=documents --target-folder=documents-restored --file=tax/tax-2020.pdf
-```
-
-Example to restore all files from the backup `documents`:
-
-```shell
-spb restore --backup-name=documents --target-folder=documents-restored 
-```
-
-Example to find a specific file in the backups:
-
-```shell
-spb list --file-pattern=important-file
-```
-
 The verify commands restores all the backed up and verifies their integrity by comparing
 the downloaded SHA256 checksums with the expected checksums.
 
 ```shell
 spb verify
+```
+
+To restore a specific file from the backup `documents`:
+
+```shell
+spb restore --backup-name=documents --target-folder=documents-restored --file=tax/tax-2020.pdf
+```
+
+To restore all files from the backup `documents`:
+
+```shell
+spb restore --backup-name=documents --target-folder=documents-restored 
+```
+
+To find a specific file in the backups:
+
+```shell
+spb list --file-pattern="folder/important.txt"
+```
+
+To find a specific file in the backups including history:
+
+```shell
+spb list --file-pattern=".*/important.*" --historical
+```
+
+This will show all versions of all matching files including the version id.
+The version id can then be used to restore this specific version:
+
+```shell
+spb restore --backup-name=documents --file-name="folder/important.txt" --target-folder="out" --version-id="sesN1qhjd6h13bsG.IIUfXeAFYE5AX7h"
 ```
 
 The full list of options are available via `spb --help` and `spb <command> --help`.
