@@ -16,7 +16,7 @@ since the last backup.
 Spb aims to be as simple as possible, while practically usable and secure.
 
 It is written in Java and compiled to a binary via [GraalVM](https://www.graalvm.org/) and available as CLI for Mac,
-Windows and Mac.
+Windows and Linux.
 
 For the critical encryption logic it relies on as few dependencies as possible:
 
